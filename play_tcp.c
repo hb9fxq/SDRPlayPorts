@@ -20,7 +20,7 @@
  *
  *  SDRPlayPorts
  *  Ports of some parts of rtl-sdr for the SDRPlay (original: git://git.osmocom.org/rtl-sdr.git /)
- *  2016: Fork by HB9FXQ (Frank Werner-krippendorf, mail@hb9fxq.ch)
+ *  2016: Fork by HB9FXQ (Frank Werner-Krippendorf, mail@hb9fxq.ch)
  *
  *  Code changes I've done:
  *  - removed rtl_sdr related calls and replaced them with mir_* to work with the SDRPlay
