@@ -8,6 +8,8 @@ Incomplete!!! Actually not working yet ... Work in progress
 # Todo
 See all //FIXME annotation
 
+## what's next
+* Gain settigns
 
 # License
 

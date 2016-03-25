@@ -599,7 +599,7 @@ int main(int argc, char **argv)
     uint32_t buf_num = 0;
     int dev_index = 0;
     int dev_given = 0;
-    int gain = 0;
+    int gain = 50;
     int ppm_error = 0;
     struct llist *curelem,*prev;
     pthread_attr_t attr;
@@ -633,7 +633,7 @@ int main(int argc, char **argv)
                 frequency = (uint32_t)atofs(optarg);
                 break;
             case 'g':
-                gain = (int)(atof(optarg) * 10); /* tenths of a dB *///FIXME
+                //gain = (int)(atof(optarg) * 10); /* tenths of a dB *///FIXME
                 break;
             case 's':
                 samp_rate = (uint32_t)atofs(optarg);//FIXME
