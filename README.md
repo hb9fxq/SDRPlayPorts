@@ -2,7 +2,7 @@
 Ports of some parts of git://git.osmocom.org/rtl-sdr.git / http://sdr.osmocom.org/trac/wiki/rtl-sdr for the SDRPlay (http://www.sdrplay.com/) 
 
 
-UNFINISCHED!!! Actually not working yet ... Work in progress
+Incomplete!!! Actually not working yet ... Work in progress
 
 
 # Todo
@@ -17,7 +17,7 @@ See all //FIXME annotation
 
  SDRPlayPorts
  Ports of some parts of rtl-sdr for the SDRPlay (git://git.osmocom.org/rtl-sdr.git /)
- Fork by HB9FXQ (Frank Werner-krippendorf, mail@hb9fxq.ch)
+ Fork by HB9FXQ (Frank Werner-Krippendorf, mail@hb9fxq.ch)
 
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
