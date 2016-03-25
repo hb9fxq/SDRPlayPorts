@@ -78,7 +78,7 @@ typedef int socklen_t;
 #define DEFAULT_BUF_LENGTH		(336 * 2) // (16 * 16384)
 #define SOCKET int
 #define SOCKET_ERROR -1
-#define DEFAULT_SAMPLE_RATE		1400000 //FIXME
+#define DEFAULT_SAMPLE_RATE		2048000//FIXME
 
 
 #endif
@@ -88,10 +88,12 @@ static SOCKET s;
 static pthread_t tcp_worker_thread;
 static pthread_t command_thread;
 static pthread_cond_t exit_cond;
-static pthread_mutex_t exit_cond_lock;
 
+static pthread_mutex_t exit_cond_lock;
 static pthread_mutex_t ll_mutex;
+
 static pthread_cond_t cond;
+static uint32_t cmd_freq_value;
 
 int samplesPerPacket, grChanged, fsChanged, rfChanged;
 
@@ -110,6 +112,13 @@ typedef struct { /* structure size must be multiple of 2 bytes */
 } dongle_info_t;
 
 
+typedef struct{
+    uint32_t bandstart;
+    uint32_t bandend;
+} frequency_allocation_t;
+
+frequency_allocation_t freqAllocationTable[8];
+
 static int global_numq = 0;
 static struct llist *ll_buffers = 0;
 static int llbuf_num = 500;
@@ -119,18 +128,12 @@ short *ibuf;
 short *qbuf;
 unsigned int firstSample;
 int n_read;
-
+int sdrIsInitialized = 0; /* 1, when mir_sdr_init done */
 mir_sdr_ErrT r;
-
-int rspMode = 0; //FIXME
-int rspLNA = 0; //FIXME
-
-
 uint32_t frequency = 100000000; //FIXME
 uint32_t samp_rate = DEFAULT_SAMPLE_RATE;//FIXME
 uint8_t *buffer;
-
-
+mir_sdr_Bw_MHzT sdr_bw = mir_sdr_BW_1_536; // FIXME
 
 static volatile int do_exit = 0;
 
@@ -321,6 +324,9 @@ struct command{
     unsigned char cmd;
     unsigned int param;
 }__attribute__((packed));
+
+void init_frequency_alloc_tab();
+
 #ifdef _WIN32
 #pragma pack(pop)
 #endif
@@ -354,12 +360,33 @@ static void *command_worker(void *arg)
         switch(cmd.cmd) {
             case 0x01:
                 printf("set freq %d\n", ntohl(cmd.param));
-                //rtlsdr_set_center_freq(dev,ntohl(cmd.param));
-                frequency = ntohl(cmd.param);
-                mir_sdr_SetRf(frequency, 1, 0);//FIXME
+                cmd_freq_value = ntohl(cmd.param);
                 break;
             case 0x02:
                 printf("set sample rate %d\n", ntohl(cmd.param));
+                samp_rate = ntohl(cmd.param);
+
+                uint32_t bwVal = samp_rate / 1000;
+
+                if(bwVal >= 8000){
+                    sdr_bw = mir_sdr_BW_8_000;
+                }else if(bwVal >=7000){
+                    sdr_bw = mir_sdr_BW_7_000;
+                }else if(bwVal >=6000){
+                    sdr_bw = mir_sdr_BW_6_000;
+                }else if(bwVal >=5000){
+                    sdr_bw = mir_sdr_BW_5_000;
+                }else if(bwVal >=1536){
+                    sdr_bw = mir_sdr_BW_1_536;
+                }else if(bwVal >=600){
+                    sdr_bw = mir_sdr_BW_0_600;
+                }else if(bwVal >=300){
+                    sdr_bw = mir_sdr_BW_0_300;
+                }else if(bwVal >=200){
+                    sdr_bw = mir_sdr_BW_0_200;
+                }
+
+
                 //rtlsdr_set_sample_rate(dev, ntohl(cmd.param));//FIXME
                 break;
             case 0x03:
@@ -414,39 +441,64 @@ static void *command_worker(void *arg)
     }
 }
 
-void sdrplay_rx(){
 
-    buffer = malloc(out_block_size * sizeof(uint8_t));
 
-    if (rspMode == 1)
-    {
-        mir_sdr_SetParam(201,1);
+void sdrplay_reinit(){
 
-        if (rspLNA == 1)
-        {
-            mir_sdr_SetParam(202,0);
-        }
-        else
-        {
-            mir_sdr_SetParam(202,1);
-        }
-
-        r = mir_sdr_Init(25, (samp_rate/1e6), (frequency/1e6),
-                         mir_sdr_BW_0_600, mir_sdr_IF_Zero, &samplesPerPacket );
+    if(sdrIsInitialized == 1){
+        r = mir_sdr_Uninit();
     }
-    else
-    {
-        r = mir_sdr_Init(78-25, (samp_rate/1e6), (frequency/1e6),
-                         mir_sdr_BW_0_600, mir_sdr_IF_Zero, &samplesPerPacket );
+
+
+    mir_sdr_SetParam(201, 1); // Set Gain Map
+
+    if(frequency >= 60e6) {
+        mir_sdr_SetParam(202, 1); // Enable LNA (note: only works if gain map = 1)
     }
+    else{
+        mir_sdr_SetParam(202, 0); // Enable LNA (note: only works if gain map = 1)
+    }
+
+    if (r != mir_sdr_Success) {
+        fprintf(stderr, "Failed to uninit SDRplay RSP device.\n");
+        exit(1);
+    }
+
+    r = mir_sdr_Init(75 /* FIXME */
+            , (samp_rate/1e6)
+            , (frequency/1e6)
+            , sdr_bw
+            , mir_sdr_IF_Zero
+            , &samplesPerPacket );
+
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to start SDRplay RSP device.\n");
         exit(1);
     }
 
-    mir_sdr_SetDcMode(4,0);
-    mir_sdr_SetDcTrackTime(63);
+    // Configure DC tracking in tuner
+    r = mir_sdr_SetDcMode(4,0);     // select one-shot DC offset correction
+
+    if (r != mir_sdr_Success) {
+        fprintf(stderr, "Failed to onfigure DC tracking in tuner of RSP device.\n");
+    }
+
+    mir_sdr_SetDcTrackTime(63); // maximum tracking time
+    if (r != mir_sdr_Success) {
+        fprintf(stderr, "Failed to onfigure DC maximum tracking time in tuner of RSP device.\n");
+    }
+
+    sdrIsInitialized = 1;
+
+}
+
+void sdrplay_rx(){
+
+    buffer = malloc(out_block_size * sizeof(uint8_t));
+    sdrplay_reinit();
+
+
 
     ibuf = malloc(samplesPerPacket * sizeof(short));
     qbuf = malloc(samplesPerPacket * sizeof(short));
@@ -455,9 +507,31 @@ void sdrplay_rx(){
 
 
 
-    while (1 /*!do_exit*/) {
+    while (!do_exit) {
+
+        int updateFreqReq = 0;
+
+        if(cmd_freq_value != frequency){
+
+            if(freq_change_req_reinnit(frequency,cmd_freq_value) == 1) {
+
+                sdrplay_reinit();
+            }
+
+            frequency = cmd_freq_value;
+
+            updateFreqReq = 1;
+            printf("*************** freq change req ****************\n");
+
+        }
+
         r = mir_sdr_ReadPacket(ibuf, qbuf, &firstSample, &grChanged, &rfChanged,
                                &fsChanged);
+
+        if(updateFreqReq == 1){
+            mir_sdr_SetRf(frequency, 1, 0);
+        }
+
         if (r != mir_sdr_Success) {
             fprintf(stderr, "WARNING: ReadPacket failed.\n");
             break;
@@ -520,7 +594,7 @@ int main(int argc, char **argv)
     int r, opt, i;
     char* addr = "127.0.0.1";
     int port = 1234;
-    uint32_t frequency = 3621312;
+
     struct sockaddr_in local, remote;
     uint32_t buf_num = 0;
     int dev_index = 0;
@@ -537,6 +611,11 @@ int main(int argc, char **argv)
     fd_set readfds;
     u_long blockmode = 1;
     dongle_info_t dongle_info;
+
+
+    init_frequency_alloc_tab();
+
+
 #ifdef _WIN32
     WSADATA wsd;
 	i = WSAStartup(MAKEWORD(2,2), &wsd);
@@ -552,13 +631,12 @@ int main(int argc, char **argv)
                 break;
             case 'f':
                 frequency = (uint32_t)atofs(optarg);
-                mir_sdr_SetRf(frequency, 1, 0);//FIXME
                 break;
             case 'g':
                 gain = (int)(atof(optarg) * 10); /* tenths of a dB *///FIXME
                 break;
             case 's':
-                // samp_rate = (uint32_t)atofs(optarg);//FIXME
+                samp_rate = (uint32_t)atofs(optarg);//FIXME
                 break;
             case 'a':
                 addr = optarg;
@@ -758,4 +836,47 @@ int main(int argc, char **argv)
 #endif
     printf("bye!\n");
     return r >= 0 ? r : -r;
+}
+
+
+
+int freq_change_req_reinnit(uint32_t old, uint32_t new){
+
+    int i;
+
+    for(i=0; i<8; i++){
+
+        frequency_allocation_t *curr = &freqAllocationTable[i];
+
+        if(old >= curr->bandstart && old <= curr->bandend){
+            return new > curr->bandend || new < curr->bandstart;
+        }
+    }
+
+    return 1;
+
+}
+
+void init_frequency_alloc_tab() {
+
+    frequency_allocation_t b1 = {0.1e6, 11.999999e6};
+    frequency_allocation_t b2 = {12e6,  29.999999e6};
+    frequency_allocation_t b3 = {30e6,  59.999999e6};
+    frequency_allocation_t b4 = {60e6,  119.999999e6};
+    frequency_allocation_t b5 = {120e6, 249.999999e6};
+    frequency_allocation_t b6 = {250e6, 419.999999e6};
+    frequency_allocation_t b7 = {420e6, 999.999999e6};
+    frequency_allocation_t b8 = {1000e6,UINT32_MAX};
+
+    freqAllocationTable[0] = b1;
+    freqAllocationTable[1] = b2;
+    freqAllocationTable[2] = b3;
+    freqAllocationTable[3] = b4;
+    freqAllocationTable[4] = b5;
+    freqAllocationTable[5] = b6;
+    freqAllocationTable[6] = b7;
+    freqAllocationTable[7] = b8;
+
+
+
 }
