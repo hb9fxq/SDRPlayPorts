@@ -113,11 +113,26 @@ typedef struct { /* structure size must be multiple of 2 bytes */
 
 
 typedef struct{
-    uint32_t bandstart;
-    uint32_t bandend;
+    uint32_t allocfrom;
+    uint32_t allocto;
 } frequency_allocation_t;
 
-frequency_allocation_t freqAllocationTable[8];
+/*
+ * frequency allocation table, see chapter 6 in mirics API spec
+ *
+ * .... . If a frequency is
+ * desired that falls outside the current band then a mir_sdr_Uninit command must be issued followed by a
+ * mir_sdr_Init command at the new frequency to force reconfiguration of the front end.....
+ *
+ */
+frequency_allocation_t freqAllocationTable[8] = {{0.1e6, 11.999999e6}
+                                                ,{12e6,  29.999999e6}
+                                                ,{30e6,  59.999999e6}
+                                                ,{60e6,  119.999999e6}
+                                                ,{120e6, 249.999999e6}
+                                                ,{250e6, 419.999999e6}
+                                                ,{420e6, 999.999999e6}
+                                                ,{1000e6,UINT32_MAX}};
 
 static int global_numq = 0;
 static struct llist *ll_buffers = 0;
@@ -325,8 +340,6 @@ struct command{
     unsigned int param;
 }__attribute__((packed));
 
-void init_frequency_alloc_tab();
-
 #ifdef _WIN32
 #pragma pack(pop)
 #endif
@@ -450,12 +463,12 @@ void sdrplay_reinit(){
     }
 
 
-    mir_sdr_SetParam(201, 1); // Set Gain Map
-
     if(frequency >= 60e6) {
+        mir_sdr_SetParam(201, 1); // Set Gain Map
         mir_sdr_SetParam(202, 1); // Enable LNA (note: only works if gain map = 1)
     }
     else{
+        mir_sdr_SetParam(201, 0); // Set Gain Map
         mir_sdr_SetParam(202, 0); // Enable LNA (note: only works if gain map = 1)
     }
 
@@ -464,7 +477,7 @@ void sdrplay_reinit(){
         exit(1);
     }
 
-    r = mir_sdr_Init(75 /* FIXME */
+    r = mir_sdr_Init(0 /* FIXME */
             , (samp_rate/1e6)
             , (frequency/1e6)
             , sdr_bw
@@ -478,15 +491,10 @@ void sdrplay_reinit(){
     }
 
     // Configure DC tracking in tuner
-    r = mir_sdr_SetDcMode(4,0);     // select one-shot DC offset correction
+    r = mir_sdr_SetDcMode(5,0);     // select one-shot DC offset correction
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to onfigure DC tracking in tuner of RSP device.\n");
-    }
-
-    mir_sdr_SetDcTrackTime(63); // maximum tracking time
-    if (r != mir_sdr_Success) {
-        fprintf(stderr, "Failed to onfigure DC maximum tracking time in tuner of RSP device.\n");
     }
 
     sdrIsInitialized = 1;
@@ -599,7 +607,7 @@ int main(int argc, char **argv)
     uint32_t buf_num = 0;
     int dev_index = 0;
     int dev_given = 0;
-    int gain = 50;
+    int gain = 0;
     int ppm_error = 0;
     struct llist *curelem,*prev;
     pthread_attr_t attr;
@@ -611,10 +619,6 @@ int main(int argc, char **argv)
     fd_set readfds;
     u_long blockmode = 1;
     dongle_info_t dongle_info;
-
-
-    init_frequency_alloc_tab();
-
 
 #ifdef _WIN32
     WSADATA wsd;
@@ -848,35 +852,11 @@ int freq_change_req_reinnit(uint32_t old, uint32_t new){
 
         frequency_allocation_t *curr = &freqAllocationTable[i];
 
-        if(old >= curr->bandstart && old <= curr->bandend){
-            return new > curr->bandend || new < curr->bandstart;
+        if(old >= curr->allocfrom && old <= curr->allocto){
+            return new > curr->allocto || new < curr->allocfrom;
         }
     }
 
     return 1;
-
-}
-
-void init_frequency_alloc_tab() {
-
-    frequency_allocation_t b1 = {0.1e6, 11.999999e6};
-    frequency_allocation_t b2 = {12e6,  29.999999e6};
-    frequency_allocation_t b3 = {30e6,  59.999999e6};
-    frequency_allocation_t b4 = {60e6,  119.999999e6};
-    frequency_allocation_t b5 = {120e6, 249.999999e6};
-    frequency_allocation_t b6 = {250e6, 419.999999e6};
-    frequency_allocation_t b7 = {420e6, 999.999999e6};
-    frequency_allocation_t b8 = {1000e6,UINT32_MAX};
-
-    freqAllocationTable[0] = b1;
-    freqAllocationTable[1] = b2;
-    freqAllocationTable[2] = b3;
-    freqAllocationTable[3] = b4;
-    freqAllocationTable[4] = b5;
-    freqAllocationTable[5] = b6;
-    freqAllocationTable[6] = b7;
-    freqAllocationTable[7] = b8;
-
-
 
 }
