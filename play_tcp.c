@@ -377,11 +377,11 @@ static void *command_worker(void *arg)
                 break;
             case 0x02:
                 printf("set sample rate %d\n", ntohl(cmd.param));
-                samp_rate = ntohl(cmd.param);
+               // samp_rate = ntohl(cmd.param);
 
-                uint32_t bwVal = samp_rate / 1000;
+                //uint32_t bwVal = samp_rate / 1000;
 
-                if(bwVal >= 8000){
+               /* if(bwVal >= 8000){
                     sdr_bw = mir_sdr_BW_8_000;
                 }else if(bwVal >=7000){
                     sdr_bw = mir_sdr_BW_7_000;
@@ -398,7 +398,7 @@ static void *command_worker(void *arg)
                 }else if(bwVal >=200){
                     sdr_bw = mir_sdr_BW_0_200;
                 }
-
+                */
 
                 //rtlsdr_set_sample_rate(dev, ntohl(cmd.param));//FIXME
                 break;
@@ -458,26 +458,23 @@ static void *command_worker(void *arg)
 
 void sdrplay_reinit(){
 
-    if(sdrIsInitialized == 1){
+    printf("======>>>>> REINIT F: %d\n", frequency);
+
+    if(sdrIsInitialized == 1) {
         r = mir_sdr_Uninit();
     }
 
+    mir_sdr_SetParam(201, 1); // Set Gain Map
+    mir_sdr_SetParam(202, 1); // Enable LNA (note: only works if gain map = 1)
 
-    if(frequency >= 60e6) {
-        mir_sdr_SetParam(201, 1); // Set Gain Map
-        mir_sdr_SetParam(202, 1); // Enable LNA (note: only works if gain map = 1)
-    }
-    else{
-        mir_sdr_SetParam(201, 0); // Set Gain Map
-        mir_sdr_SetParam(202, 0); // Enable LNA (note: only works if gain map = 1)
-    }
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to uninit SDRplay RSP device.\n");
         exit(1);
     }
 
-    r = mir_sdr_Init(0 /* FIXME */
+
+    r = mir_sdr_Init(30 /* FIXME */
             , (samp_rate/1e6)
             , (frequency/1e6)
             , sdr_bw
@@ -485,13 +482,23 @@ void sdrplay_reinit(){
             , &samplesPerPacket );
 
 
+    mir_sdr_SetRf(frequency, 1, 0);
+
+    if (r != mir_sdr_Success) {
+        fprintf(stderr, "Failed to start SDRplay RSP device.\n");
+        exit(1);
+    }
+
+    mir_sdr_SetDcMode(4,0);
+    mir_sdr_SetDcTrackTime(63);
+
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to start SDRplay RSP device.\n");
         exit(1);
     }
 
     // Configure DC tracking in tuner
-    r = mir_sdr_SetDcMode(5,0);     // select one-shot DC offset correction
+
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to onfigure DC tracking in tuner of RSP device.\n");
@@ -517,18 +524,19 @@ void sdrplay_rx(){
 
     while (!do_exit) {
 
-        int updateFreqReq = 0;
+
 
         if(cmd_freq_value != frequency){
 
             if(freq_change_req_reinnit(frequency,cmd_freq_value) == 1) {
 
+                frequency = cmd_freq_value;
                 sdrplay_reinit();
+            }else{
+                frequency = cmd_freq_value; // update tracking freq;
+                mir_sdr_SetRf(frequency, 1, 0);
             }
 
-            frequency = cmd_freq_value;
-
-            updateFreqReq = 1;
             printf("*************** freq change req ****************\n");
 
         }
@@ -536,9 +544,6 @@ void sdrplay_rx(){
         r = mir_sdr_ReadPacket(ibuf, qbuf, &firstSample, &grChanged, &rfChanged,
                                &fsChanged);
 
-        if(updateFreqReq == 1){
-            mir_sdr_SetRf(frequency, 1, 0);
-        }
 
         if (r != mir_sdr_Success) {
             fprintf(stderr, "WARNING: ReadPacket failed.\n");
