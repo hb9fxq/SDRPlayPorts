@@ -125,7 +125,7 @@ typedef struct{
  * mir_sdr_Init command at the new frequency to force reconfiguration of the front end.....
  *
  */
-frequency_allocation_t freqAllocationTable[8] = {{0.1e6, 11.999999e6}
+frequency_allocation_t freqAllocationTable[8] = {{0, 11.999999e6}
                                                 ,{12e6,  29.999999e6}
                                                 ,{30e6,  59.999999e6}
                                                 ,{60e6,  119.999999e6}
@@ -134,7 +134,6 @@ frequency_allocation_t freqAllocationTable[8] = {{0.1e6, 11.999999e6}
                                                 ,{420e6, 999.999999e6}
                                                 ,{1000e6,UINT32_MAX}};
 
-static int global_numq = 0;
 static struct llist *ll_buffers = 0;
 static int llbuf_num = 500;
 
@@ -145,25 +144,28 @@ unsigned int firstSample;
 int n_read;
 int sdrIsInitialized = 0; /* 1, when mir_sdr_init done */
 mir_sdr_ErrT r;
-uint32_t frequency = 100000000; //FIXME
-uint32_t samp_rate = DEFAULT_SAMPLE_RATE;//FIXME
+uint32_t frequency = 100000000;
+int gain = 30;
+uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
 uint8_t *buffer;
-mir_sdr_Bw_MHzT sdr_bw = mir_sdr_BW_1_536; // FIXME
+mir_sdr_Bw_MHzT sdr_bw = mir_sdr_BW_1_536;
+int rspMode = 0;
+int rspLNA = 0;
 
 static volatile int do_exit = 0;
 
 void usage(void)
 {
-    printf("rtl_tcp, an I/Q spectrum server for RTL2832 based DVB-T receivers\n\n"
+    printf("play_tcp (rtl_tcp fork for SDRPlay), an I/Q spectrum server for SDRPlay receivers\n\n"
                    "Usage:\t[-a listen address]\n"
                    "\t[-p listen port (default: 1234)]\n"
                    "\t[-f frequency to tune to [Hz]]\n"
-                   "\t[-g gain (default: 0 for auto)]\n"
+                   "\t[-g SDRPlay Gain reduction], see http://www.sdrplay.com/docs/Mirics_SDR_API_Specification.pdf for details\n"
                    "\t[-s samplerate in Hz (default: 2048000 Hz)]\n"
                    "\t[-b number of buffers (default: 15, set by library)]\n"
                    "\t[-n max number of linked list buffers to keep (default: 500)]\n"
-                   "\t[-d device index (default: 0)]\n"
-                   "\t[-P ppm_error (default: 0)]\n");
+                   "\t[-r enable gain reduction (default: 0, disabled)]\n"
+                   "\t[-l RSP LNA enable (default: 0, disabled)]\n");
     exit(1);
 }
 
@@ -242,12 +244,6 @@ void rtlsdr_callback(unsigned char *buf, uint32_t len)
 
             cur->next = rpt;
 
-            //if (num_queued > global_numq)
-                //printf("ll+, now %d\n", num_queued);
-            //else if (num_queued < global_numq)
-                //printf("ll-, now %d\n", num_queued);
-
-            global_numq = num_queued;
         }
         pthread_cond_signal(&cond);
         pthread_mutex_unlock(&ll_mutex);
@@ -313,24 +309,6 @@ static void *tcp_worker(void *arg)
     }
 }
 
-/*static int set_gain_by_index(rtlsdr_dev_t *_dev, unsigned int index)
-{
-    int res = 0;
-    int* gains;
-    int count = rtlsdr_get_tuner_gains(_dev, NULL);
-
-    if (count > 0 && (unsigned int)count > index) {
-        gains = malloc(sizeof(int) * count);
-        count = rtlsdr_get_tuner_gains(_dev, gains);
-
-        res = rtlsdr_set_tuner_gain(_dev, gains[index]);
-
-        free(gains);
-    }
-
-    return res;
-}*/
-
 #ifdef _WIN32
 #define __attribute__(x)
 #pragma pack(push, 1)
@@ -376,76 +354,42 @@ static void *command_worker(void *arg)
                 cmd_freq_value = ntohl(cmd.param);
                 break;
             case 0x02:
-                printf("set sample rate %d\n", ntohl(cmd.param));
-               // samp_rate = ntohl(cmd.param);
-
-                //uint32_t bwVal = samp_rate / 1000;
-
-               /* if(bwVal >= 8000){
-                    sdr_bw = mir_sdr_BW_8_000;
-                }else if(bwVal >=7000){
-                    sdr_bw = mir_sdr_BW_7_000;
-                }else if(bwVal >=6000){
-                    sdr_bw = mir_sdr_BW_6_000;
-                }else if(bwVal >=5000){
-                    sdr_bw = mir_sdr_BW_5_000;
-                }else if(bwVal >=1536){
-                    sdr_bw = mir_sdr_BW_1_536;
-                }else if(bwVal >=600){
-                    sdr_bw = mir_sdr_BW_0_600;
-                }else if(bwVal >=300){
-                    sdr_bw = mir_sdr_BW_0_300;
-                }else if(bwVal >=200){
-                    sdr_bw = mir_sdr_BW_0_200;
-                }
-                */
-
-                //rtlsdr_set_sample_rate(dev, ntohl(cmd.param));//FIXME
+                printf("set sample rate %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x03:
-                printf("set gain mode %d\n", ntohl(cmd.param));
-                //rtlsdr_set_tuner_gain_mode(dev, ntohl(cmd.param));//FIXME
+                printf("set gain mode %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x04:
-                printf("set gain %d\n", ntohl(cmd.param));
-                //rtlsdr_set_tuner_gain(dev, ntohl(cmd.param));//FIXME
+                printf("set gain %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
+                printf("SDRPlay gain update currently ignored, set at startup with 'rtl_tcp -g'\n");
                 break;
             case 0x05:
-                printf("set freq correction %d\n", ntohl(cmd.param));
-                //rtlsdr_set_freq_correction(dev, ntohl(cmd.param));//FIXME
+                printf("set freq correction %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x06:
                 tmp = ntohl(cmd.param);
-                printf("set if stage %d gain %d\n", tmp >> 16, (short)(tmp & 0xffff));
-                //rtlsdr_set_tuner_if_gain(dev, tmp >> 16, (short)(tmp & 0xffff));//FIXME
+                printf("set if stage %d gain %d\n", tmp >> 16, (short)(tmp & 0xffff));               
                 break;
             case 0x07:
-                printf("set test mode %d\n", ntohl(cmd.param));
-                //rtlsdr_set_testmode(dev, ntohl(cmd.param));//FIXME
+                printf("set test mode %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x08:
-                printf("set agc mode %d\n", ntohl(cmd.param));
-                //rtlsdr_set_agc_mode(dev, ntohl(cmd.param));//FIXME
+                printf("set agc mode %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x09:
-                printf("set direct sampling %d\n", ntohl(cmd.param));
-                //rtlsdr_set_direct_sampling(dev, ntohl(cmd.param));//FIXME
+                printf("set direct sampling %d\n !Not implemented for SDRPlay (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x0a:
-                printf("set offset tuning %d\n", ntohl(cmd.param));
-                //rtlsdr_set_offset_tuning(dev, ntohl(cmd.param));//FIXME
+                printf("set offset tuning %d\n !Not implemented for SDRPlay (not yet...) (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x0b:
-                printf("set rtl xtal %d\n", ntohl(cmd.param));
-                //rtlsdr_set_xtal_freq(dev, ntohl(cmd.param), 0);//FIXME
+                printf("set rtl xtal %d\n !Not implemented for SDRPlay (not yet...) (not yet...)\n", ntohl(cmd.param));
                 break;
             case 0x0c:
-                printf("set tuner xtal %d\n", ntohl(cmd.param));
-                //rtlsdr_set_xtal_freq(dev, 0, ntohl(cmd.param));//FIXME
+                printf("set tuner xtal %d\n !Not implemented for SDRPlay (not yet...)\"", ntohl(cmd.param));
                 break;
             case 0x0d:
-                printf("set tuner gain by index %d\n", ntohl(cmd.param));
-                //set_gain_by_index(dev, ntohl(cmd.param));//FIXME
+                printf("set tuner gain by index %d\n !Not implemented for SDRPlay (not yet...)\"", ntohl(cmd.param));
                 break;
             default:
                 break;
@@ -464,30 +408,36 @@ void sdrplay_reinit(){
         r = mir_sdr_Uninit();
     }
 
-    mir_sdr_SetParam(201, 1); // Set Gain Map
-    mir_sdr_SetParam(202, 1); // Enable LNA (note: only works if gain map = 1)
-
-
-    if (r != mir_sdr_Success) {
-        fprintf(stderr, "Failed to uninit SDRplay RSP device.\n");
-        exit(1);
+    if (rspMode == 1)
+    {
+        mir_sdr_SetParam(201,1);
+        if (rspLNA == 1)
+        {
+            mir_sdr_SetParam(202,0);
+        }
+        else
+        {
+            mir_sdr_SetParam(202,1);
+        }
+        r = mir_sdr_Init(gain, (samp_rate/1e6), (frequency/1e6),
+                         sdr_bw, mir_sdr_IF_Zero, &samplesPerPacket );
     }
-
-
-    r = mir_sdr_Init(30 /* FIXME */
-            , (samp_rate/1e6)
-            , (frequency/1e6)
-            , sdr_bw
-            , mir_sdr_IF_Zero
-            , &samplesPerPacket );
-
-
-    mir_sdr_SetRf(frequency, 1, 0);
+    else
+    {
+        r = mir_sdr_Init((78-gain), (samp_rate/1e6), (frequency/1e6),
+                         sdr_bw, mir_sdr_IF_Zero, &samplesPerPacket );
+    }
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to start SDRplay RSP device.\n");
         exit(1);
     }
+
+    while(mir_sdr_Success != mir_sdr_SetRf(frequency, 1, 0)){
+        printf("SetRf rejected, retry....\n");
+    }
+
+    printf("SetRf to %d\n", frequency);
 
     mir_sdr_SetDcMode(4,0);
     mir_sdr_SetDcTrackTime(63);
@@ -612,7 +562,7 @@ int main(int argc, char **argv)
     uint32_t buf_num = 0;
     int dev_index = 0;
     int dev_given = 0;
-    int gain = 0;
+    gain = 30;
     int ppm_error = 0;
     struct llist *curelem,*prev;
     pthread_attr_t attr;
@@ -632,17 +582,23 @@ int main(int argc, char **argv)
     struct sigaction sigact, sigign;
 #endif
 
-    while ((opt = getopt(argc, argv, "a:p:f:g:s:b:n:d:P:")) != -1) {
+    while ((opt = getopt(argc, argv, "a:p:f:g:s:b:n:d:P:r:l:")) != -1) {
         switch (opt) {
             case 'd':
                 //dev_index = verbose_device_search(optarg);
                 //dev_given = 1;//FIXME
                 break;
+            case 'r':
+                rspMode = atoi(optarg);
+                break;
+            case 'l':
+                rspLNA = atoi(optarg);
+                break;
             case 'f':
                 frequency = (uint32_t)atofs(optarg);
                 break;
             case 'g':
-                //gain = (int)(atof(optarg) * 10); /* tenths of a dB *///FIXME
+                gain = (int)(atof(optarg) * 10); /* tenths of a dB *///FIXME
                 break;
             case 's':
                 samp_rate = (uint32_t)atofs(optarg);//FIXME
@@ -679,13 +635,6 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // rtlsdr_open(&dev, (uint32_t)dev_index);
-
-   /* if (NULL == dev) {
-        fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev_index);
-        exit(1);
-    }*/
-
 #ifndef _WIN32
     sigact.sa_handler = sighandler;
     sigemptyset(&sigact.sa_mask);
@@ -698,45 +647,6 @@ int main(int argc, char **argv)
 #else
     SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
-
-   /* *//* Set the tuner error *//*
-    verbose_ppm_set(dev, ppm_error);
-
-    *//* Set the sample rate *//*
-    r = rtlsdr_set_sample_rate(dev, samp_rate);
-    if (r < 0)
-        fprintf(stderr, "WARNING: Failed to set sample rate.\n");
-
-    *//* Set the frequency *//*
-    r = rtlsdr_set_center_freq(dev, frequency);
-    if (r < 0)
-        fprintf(stderr, "WARNING: Failed to set center freq.\n");
-    else
-        fprintf(stderr, "Tuned to %i Hz.\n", frequency);
-
-    if (0 == gain) {
-        *//* Enable automatic gain *//*
-        r = rtlsdr_set_tuner_gain_mode(dev, 0);
-        if (r < 0)
-            fprintf(stderr, "WARNING: Failed to enable automatic gain.\n");
-    } else {
-        *//* Enable manual gain *//*
-        r = rtlsdr_set_tuner_gain_mode(dev, 1);
-        if (r < 0)
-            fprintf(stderr, "WARNING: Failed to enable manual gain.\n");
-
-        *//* Set the tuner gain *//*
-        r = rtlsdr_set_tuner_gain(dev, gain);
-        if (r < 0)
-            fprintf(stderr, "WARNING: Failed to set tuner gain.\n");
-        else
-            fprintf(stderr, "Tuner gain set to %f dB.\n", gain/10.0);
-    }
-
-    *//* Reset endpoint before we start reading from it (mandatory) *//*
-    r = rtlsdr_reset_buffer(dev);
-    if (r < 0)
-        fprintf(stderr, "WARNING: Failed to reset buffers.\n");*/
 
     pthread_mutex_init(&exit_cond_lock, NULL);
     pthread_mutex_init(&ll_mutex, NULL);
@@ -831,7 +741,6 @@ int main(int argc, char **argv)
         }
 
         do_exit = 0;
-        global_numq = 0;
     }
 
 
