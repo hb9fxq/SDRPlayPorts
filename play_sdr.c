@@ -328,9 +328,19 @@ int main(int argc, char **argv)
             do_exit = 1;
         }
 
-        if (fwrite(resultBits == 8 ? buffer8 : buffer16, 1, n_read, file) != (size_t)n_read) {
-            fprintf(stderr, "Short write, samples lost, exiting!\n"); break;
+        if(resultBits == 8) {
+            if (fwrite(buffer8, 1, n_read, file) != (size_t) n_read) {
+                fprintf(stderr, "Short write, samples lost, exiting!\n");
+                break;
+            }
         }
+        else{
+            if (fwrite(buffer16, 1, n_read, file) != (size_t) n_read) {
+                fprintf(stderr, "Short write, samples lost, exiting!\n");
+                break;
+            }
+        }
+
 
         if ((uint32_t)n_read < out_block_size) {
             fprintf(stderr, "Short read, samples lost, exiting!\n");
@@ -350,7 +360,14 @@ int main(int argc, char **argv)
         fclose(file);
 
     mir_sdr_Uninit();
-    free (resultBits == 8 ? buffer8 : buffer16);
+
+    if(resultBits == 8){
+        free (buffer8);
+    }
+    else{
+        free (buffer16);
+    }
+
     out:
     return r >= 0 ? r : -r;
 }
