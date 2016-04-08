@@ -1,6 +1,7 @@
 /*
  * rtl-sdr, turns your Realtek RTL2832 based DVB dongle into a SDR receiver
  * Copyright (C) 2012 by Steve Markgraf <steve@steve-m.de>
+ * Copyright (C) 2012-2013 by Hoernchen <la@tfc-server.de>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,8 +16,30 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
+ * ************************************** THIS IS A FORK ******************* ORIGINAL COPYRIGHT SEE ABOVE.
  *
- * HB9FXQ, mail@hb9fxq.ch Frank Werner-Krippendorf (taken this file as is from https://github.com/SDRplay/examples)
+ *  SDRPlayPorts
+ *  Ports of some parts of rtl-sdr for the SDRPlay (original: git://git.osmocom.org/rtl-sdr.git /)
+ *  2016: Fork by HB9FXQ (Frank Werner-Krippendorf, mail@hb9fxq.ch)
+ *
+ *  Code changes I've done:
+ *  - removed rtl_sdr related calls and replaced them with mir_* to work with the SDRPlay
+ *  - removed various local variables
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
  *
  */
 
@@ -50,6 +73,9 @@ short *qbuf;
 unsigned int firstSample;
 int samplesPerPacket, grChanged, fsChanged, rfChanged;
 
+void adjsutbw(int bwHz, mir_sdr_Bw_MHzT *ptr);
+void adjsutif(int ifFreq, mir_sdr_If_kHzT *ptr);
+
 double atofs(char *s)
 /* standard suffixes */
 {
@@ -81,8 +107,10 @@ void usage(void)
 {
     fprintf(stderr,
             "play_sdr, an I/Q recorder for SDRplay RSP receivers\n\n"
-                    "Usage:\t -f frequency_to_tune_to [Hz]\n"
+                    "Usage:\t -f frequency_to_tune_to (Hz)\n"
                     "\t[-s samplerate (default: 2048000 Hz)]\n"
+                    "\t[-b Band Width in Hz (default: 1536) possible values: 200 300 600 1536 5000 6000 7000 8000]\n"
+                    "\t[-i IF in kHz (default: 0 (=Zero IF)) possible values: 0 450 1620 2048]\n"
                     "\t[-g gain (default: 50)]\n"
                     "\t[-n number of samples to read (default: 0, infinite)]\n"
                     "\t[-r enable gain reduction (default: 0, disabled)]\n"
@@ -127,11 +155,13 @@ int main(int argc, char **argv)
     uint32_t frequency = 100000000;
     uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
     uint32_t out_block_size = DEFAULT_BUF_LENGTH;
-    int rspMode = 0;
+    int gainReductionMode = 0;
     int rspLNA = 0;
     int i, j;
+    mir_sdr_Bw_MHzT bandwidth = mir_sdr_BW_1_536;
+    mir_sdr_If_kHzT ifKhz = mir_sdr_IF_Zero;
 
-    while ((opt = getopt(argc, argv, "f:g:s:n:r:l")) != -1) {
+    while ((opt = getopt(argc, argv, "f:g:s:n:r:l:b:i:")) != -1) {
         switch (opt) {
             case 'f':
                 frequency = (uint32_t)atofs(optarg);
@@ -146,10 +176,16 @@ int main(int argc, char **argv)
                 bytes_to_read = (uint32_t)atofs(optarg) * 2;
                 break;
             case 'r':
-                rspMode = atoi(optarg);
+                gainReductionMode = atoi(optarg);
                 break;
             case 'l':
                 rspLNA = atoi(optarg);
+                break;
+            case 'b':
+                adjsutbw(atoi(optarg), &bandwidth);
+                break;
+            case 'i':
+                adjsutif(atoi(optarg), &ifKhz);
                 break;
             default:
                 usage();
@@ -162,6 +198,17 @@ int main(int argc, char **argv)
     } else {
         filename = argv[optind];
     }
+
+    fprintf(stdout, "[DEBUG] *************** play_sdr16 init summary *********************\n");
+    fprintf(stdout, "[DEBUG] LNA: %d\n", rspLNA);
+    fprintf(stdout, "[DEBUG] gainReductionMode: %d\n", gainReductionMode);
+    fprintf(stdout, "[DEBUG] samp_rate: %d\n", samp_rate);
+    fprintf(stdout, "[DEBUG] gain: %d\n", gain);
+    fprintf(stdout, "[DEBUG] frequency: [Hz] %d / [MHz] %f\n", frequency, frequency/1e6);
+    fprintf(stdout, "[DEBUG] bandwidth: [kHz] %d\n", bandwidth);
+    fprintf(stdout, "[DEBUG] IF: %d\n", ifKhz);
+    fprintf(stdout, "[DEBUG] *************************************************************\n");
+
 
     if(out_block_size < MINIMAL_BUF_LENGTH ||
        out_block_size > MAXIMAL_BUF_LENGTH ){
@@ -178,11 +225,14 @@ int main(int argc, char **argv)
 
     r = mir_sdr_Init(40, 2.0, 100.00, mir_sdr_BW_1_536, mir_sdr_IF_Zero,
                      &samplesPerPacket);
+
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to open SDRplay RSP device.\n");
         exit(1);
     }
+
     mir_sdr_Uninit();
+
 #ifndef _WIN32
     sigact.sa_handler = sighandler;
     sigemptyset(&sigact.sa_mask);
@@ -208,9 +258,10 @@ int main(int argc, char **argv)
         }
     }
 
-    if (rspMode == 1)
+    if (gainReductionMode == 1)
     {
         mir_sdr_SetParam(201,1);
+
         if (rspLNA == 1)
         {
             mir_sdr_SetParam(202,0);
@@ -220,12 +271,12 @@ int main(int argc, char **argv)
             mir_sdr_SetParam(202,1);
         }
         r = mir_sdr_Init(gain, (samp_rate/1e6), (frequency/1e6),
-                         mir_sdr_BW_1_536, mir_sdr_IF_Zero, &samplesPerPacket );
+                         bandwidth, ifKhz, &samplesPerPacket );
     }
     else
     {
         r = mir_sdr_Init((78-gain), (samp_rate/1e6), (frequency/1e6),
-                         mir_sdr_BW_1_536, mir_sdr_IF_Zero, &samplesPerPacket );
+                         bandwidth, ifKhz, &samplesPerPacket );
     }
 
     if (r != mir_sdr_Success) {
@@ -287,4 +338,37 @@ int main(int argc, char **argv)
     free (buffer);
     out:
     return r >= 0 ? r : -r;
+}
+
+void adjsutif(int ifFreq, mir_sdr_If_kHzT *ptrIFKhz) {
+ switch (ifFreq){
+     case 0:
+     case 450:
+     case 1620:
+     case 2048:
+         *ptrIFKhz = ifFreq;
+         return;
+ }
+
+    fprintf(stderr, "Invalid IF frequency (-i) !\n");
+    usage();
+
+}
+
+void adjsutbw(int bwHz, mir_sdr_Bw_MHzT *ptrBw) {
+
+    switch (bwHz){
+        case 200:
+        case 300:
+        case 600:
+        case 1536:
+        case 5000:
+        case 6000:
+        case 8000:
+            *ptrBw = bwHz;
+            return;
+    }
+
+    fprintf(stderr, "Invalid Band Width (-b) !\n");
+    usage();
 }

@@ -3,16 +3,36 @@ Ports of some parts of git://git.osmocom.org/rtl-sdr.git / http://sdr.osmocom.or
 
 
 Incomplete!!! Actually not working yet ... Work in progress
-Prototype demo: https://youtu.be/rDvxwpe5HT8
+Prototype demo:
+* https://youtu.be/rDvxwpe5HT8 rtl_tcp first steps
+* https://youtu.be/aYnz0Auqwho play_sdr first steps
+
+# Installation
+
+1. SDRPlay API
+<br>Download the SDRPlay linux api.
+* x86 32/64bit: http://www.sdrplay.com/linux.html
+* RaspberryPI: http://www.sdrplay.com/raspberrypi2.html
+
+and follow the instructions.
+
+2. Build SDRPlayPorts:
+<pre>
+git clone https://github.com/krippendorf/SDRPlayPorts.git
+cd SDRPlayPorts
+mkdir build && cd build
+cmake ..
+make
+sudo make install
+</pre>
 
 # Todo
-See all //FIXME annotation
+* Test, refactor and enhance ;-)
 
 ## what's next
 * Gain settigns
 
 # License
-
 
 ##SDRPlayPorts Licence
 

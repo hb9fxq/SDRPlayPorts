@@ -1,3 +1,4 @@
+cmake_minimum_required (VERSION 2.8)
 project(SDRPlayPorts)
 
 link_directories(/usr/local/lib)
@@ -12,4 +13,5 @@ target_link_libraries (play_sdr pthread m mirsdrapi-rsp)
 target_link_libraries (play_tcp pthread m mirsdrapi-rsp)
 target_link_libraries (play_sdr16 pthread m mirsdrapi-rsp)
 
+install (TARGETS play_sdr16 play_sdr play_tcp DESTINATION /usr/local/bin)
 
