@@ -143,7 +143,7 @@ sighandler(int signum)
 #else
 static void sighandler(int signum)
 {
-    fprintf(stderr, "Signal caught, exiting!\n");
+    fprintf(stderr, "Signal (%d) caught, exiting!\n", signum);
     do_exit = 1;
     mir_sdr_Uninit();
 }
@@ -282,23 +282,11 @@ int main(int argc, char **argv)
     if (gainReductionMode == 1)
     {
         mir_sdr_SetParam(201,1);
+        mir_sdr_SetParam(202,rspLNA == 1 ? 0 : 1);
+    }
 
-        if (rspLNA == 1)
-        {
-            mir_sdr_SetParam(202,0);
-        }
-        else
-        {
-            mir_sdr_SetParam(202,1);
-        }
-        r = mir_sdr_Init(gain, (samp_rate/1e6), (frequency/1e6),
-                         bandwidth, ifKhz, &samplesPerPacket );
-    }
-    else
-    {
-        r = mir_sdr_Init((78-gain), (samp_rate/1e6), (frequency/1e6),
-                         bandwidth, ifKhz, &samplesPerPacket );
-    }
+    r = mir_sdr_Init((gainReductionMode == 1 ? gain : 78-gain), (samp_rate/1e6), (frequency/1e6),
+                     bandwidth, ifKhz, &samplesPerPacket );
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to start SDRplay RSP device.\n");
