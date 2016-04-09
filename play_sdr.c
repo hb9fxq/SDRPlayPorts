@@ -312,10 +312,10 @@ int main(int argc, char **argv)
 
 
         if(resultBits == 8) {
-            fwrite(buffer8, sizeof(uint8_t), samplesPerPacket * 2, file) == -1;
+            fwrite(buffer8, sizeof(uint8_t), samplesPerPacket * 2, file);
         }
         else{
-            fwrite(buffer16, sizeof(short), samplesPerPacket * 2, file) == -1;
+            fwrite(buffer16, sizeof(short), samplesPerPacket * 2, file);
         }
 
 
