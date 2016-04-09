@@ -267,6 +267,8 @@ int main(int argc, char **argv)
                      bandwidth, ifKhz, &samplesPerPacket );
 
 
+
+
     if(resultBits == 8) {
         buffer8 = malloc(2*samplesPerPacket * sizeof(uint8_t));
     }
@@ -310,16 +312,10 @@ int main(int argc, char **argv)
 
 
         if(resultBits == 8) {
-            if (fwrite(buffer8, 1, samplesPerPacket * sizeof(uint8_t) * 2, file) == -1) {
-                fprintf(stderr, "Short write, samples lost, exiting! n_read %d\n", n_read);
-                break;
-            }
+            fwrite(buffer8, sizeof(uint8_t), samplesPerPacket * 2, file) == -1;
         }
         else{
-            if (fwrite(buffer16, 1, samplesPerPacket * sizeof(short) * 2, file) == -1) {
-                fprintf(stderr, "Short write, samples lost, exiting! n_read %d samplesPePacket %d\n", n_read, samplesPerPacket);
-                break;
-            }
+            fwrite(buffer16, sizeof(short), samplesPerPacket * 2, file) == -1;
         }
 
 
