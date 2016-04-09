@@ -61,9 +61,6 @@
 #endif
 
 #define DEFAULT_SAMPLE_RATE		2048000
-#define DEFAULT_BUF_LENGTH		(336 * 2) // (16 * 16384)
-#define MINIMAL_BUF_LENGTH		672 // 512
-#define MAXIMAL_BUF_LENGTH		(256 * 16384)
 #define DEFAULT_LNA		        0;
 #define DEFAULT_GAIN_REDUCTION  0;
 #define DEFAULT_GAIN            40;
@@ -166,7 +163,6 @@ int main(int argc, char **argv)
 
     uint32_t frequency = DEFAULT_FREQUENCY;
     uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
-    uint32_t out_block_size = DEFAULT_BUF_LENGTH;
     int gainReductionMode = DEFAULT_GAIN_REDUCTION;
     int rspLNA = DEFAULT_LNA;
     int i, j;
@@ -226,24 +222,6 @@ int main(int argc, char **argv)
     fprintf(stdout, "[DEBUG] *************************************************************\n");
 
 
-    if(out_block_size < MINIMAL_BUF_LENGTH ||
-       out_block_size > MAXIMAL_BUF_LENGTH ){
-        fprintf(stderr,
-                "Output block size wrong value, falling back to default\n");
-        fprintf(stderr,
-                "Minimal length: %u\n", MINIMAL_BUF_LENGTH);
-        fprintf(stderr,
-                "Maximal length: %u\n", MAXIMAL_BUF_LENGTH);
-        out_block_size = DEFAULT_BUF_LENGTH;
-    }
-
-    if(resultBits == 8) {
-        buffer8 = malloc(out_block_size * sizeof(uint8_t));
-    }
-    else {
-        buffer16 = malloc(out_block_size * sizeof(short));
-    }
-
     r = mir_sdr_Init(40, 2.0, 100.00, mir_sdr_BW_1_536, mir_sdr_IF_Zero,
                      &samplesPerPacket);
 
@@ -288,6 +266,15 @@ int main(int argc, char **argv)
     r = mir_sdr_Init((gainReductionMode == 1 ? gain : 78-gain), (samp_rate/1e6), (frequency/1e6),
                      bandwidth, ifKhz, &samplesPerPacket );
 
+
+    if(resultBits == 8) {
+        buffer8 = malloc(2*samplesPerPacket * sizeof(uint8_t));
+    }
+    else {
+        buffer16 = malloc(2*samplesPerPacket * sizeof(short));
+    }
+
+
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to start SDRplay RSP device.\n");
         exit(1);
@@ -321,34 +308,21 @@ int main(int argc, char **argv)
             }
         }
 
-        n_read = (samplesPerPacket * (resultBits / 4));
-
-        if ((bytes_to_read > 0) && (bytes_to_read <= (uint32_t)n_read)) {
-            n_read = bytes_to_read;
-            do_exit = 1;
-        }
 
         if(resultBits == 8) {
-            if (fwrite(buffer8, 1, n_read, file) != (size_t) n_read) {
-                fprintf(stderr, "Short write, samples lost, exiting!\n");
+            if (fwrite(buffer8, 1, samplesPerPacket * sizeof(uint8_t) * 2, file) == -1) {
+                fprintf(stderr, "Short write, samples lost, exiting! n_read %d\n", n_read);
                 break;
             }
         }
         else{
-            if (fwrite(buffer16, 1, n_read, file) != (size_t) n_read) {
-                fprintf(stderr, "Short write, samples lost, exiting!\n");
+            if (fwrite(buffer16, 1, samplesPerPacket * sizeof(short) * 2, file) == -1) {
+                fprintf(stderr, "Short write, samples lost, exiting! n_read %d samplesPePacket %d\n", n_read, samplesPerPacket);
                 break;
             }
         }
 
 
-        if ((uint32_t)n_read < out_block_size) {
-            fprintf(stderr, "Short read, samples lost, exiting!\n");
-            break;
-        }
-
-        if (bytes_to_read > 0)
-            bytes_to_read -= n_read;
     }
 
     if (do_exit)
