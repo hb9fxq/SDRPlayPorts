@@ -51,8 +51,10 @@
 #include <stdlib.h>
 
 #ifndef _WIN32
+
 #include <unistd.h>
 #include "mirsdrapi-rsp.h"
+
 #else
 #include <windows.h>
 #include <io.h>
@@ -60,15 +62,14 @@
 #include "mir_sdr.h"
 #endif
 
-#define DEFAULT_SAMPLE_RATE		2048000
-#define DEFAULT_LNA		        0;
+#define DEFAULT_SAMPLE_RATE        2048000
+#define DEFAULT_LNA                0;
 #define DEFAULT_GAIN_REDUCTION  0;
 #define DEFAULT_GAIN            40;
 #define DEFAULT_FREQUENCY       100000000;
 #define DEFAULT_RESULT_BITS     8; // more compatible with RTL_SDR
 
 static int do_exit = 0;
-static uint32_t bytes_to_read = 0;
 
 short *ibuf;
 short *qbuf;
@@ -76,10 +77,11 @@ unsigned int firstSample;
 int samplesPerPacket, grChanged, fsChanged, rfChanged;
 int resultBits = DEFAULT_RESULT_BITS;
 
-void adjsut_bw(int bwHz, mir_sdr_Bw_MHzT *ptr);
-void adjsut_if(int ifFreq, mir_sdr_If_kHzT *ptr);
+void adjust_bw(int bwHz, mir_sdr_Bw_MHzT *ptr);
 
-void adjsut_result_bits(int bits, int *ptrResultBits);
+void adjust_if(int ifFreq, mir_sdr_If_kHzT *ptr);
+
+void adjust_result_bits(int bits, int *ptrResultBits);
 
 double atofs(char *s)
 /* standard suffixes */
@@ -88,8 +90,8 @@ double atofs(char *s)
     int len;
     double suff = 1.0;
     len = strlen(s);
-    last = s[len-1];
-    s[len-1] = '\0';
+    last = s[len - 1];
+    s[len - 1] = '\0';
     switch (last) {
         case 'g':
         case 'G':
@@ -101,15 +103,14 @@ double atofs(char *s)
         case 'K':
             suff *= 1e3;
             suff *= atof(s);
-            s[len-1] = last;
+            s[len - 1] = last;
             return suff;
     }
-    s[len-1] = last;
+    s[len - 1] = last;
     return atof(s);
 }
 
-void usage(void)
-{
+void usage(void) {
     fprintf(stderr,
             "play_sdr, an I/Q recorder for SDRplay RSP receivers\n\n"
                     "Usage:\t -f frequency_to_tune_to (Hz)\n"
@@ -117,10 +118,9 @@ void usage(void)
                     "\t[-b Band Width in Hz (default: 1536) possible values: 200 300 600 1536 5000 6000 7000 8000]\n"
                     "\t[-i IF in kHz (default: 0 (=Zero IF)) possible values: 0 450 1620 2048]\n"
                     "\t[-g gain (default: 50)]\n"
-                    "\t[-n number of samples to read (default: 0, infinite)]\n"
                     "\t[-r enable gain reduction (default: 0, disabled)]\n"
                     "\t[-l RSP LNA enable (default: 0, disabled)]\n"
-                    "\t[-x Result I/Q bit resolution (uint8 / short) (default: 0, possible values: 8 16)]\n"
+                    "\t[-x Result I/Q bit resolution (uint8 / short) (default: 8, possible values: 8 16)]\n"
                     "\tfilename (a '-' dumps samples to stdout)\n\n");
     exit(1);
 }
@@ -129,30 +129,30 @@ void usage(void)
 BOOL WINAPI
 sighandler(int signum)
 {
-	if (CTRL_C_EVENT == signum) {
-		fprintf(stderr, "Signal caught, exiting!\n");
-		do_exit = 1;
-		mir_sdr_Uninit();
-		return TRUE;
-	}
-	return FALSE;
+    if (CTRL_C_EVENT == signum) {
+        fprintf(stderr, "Signal caught, exiting!\n");
+        do_exit = 1;
+        mir_sdr_Uninit();
+        return TRUE;
+    }
+    return FALSE;
 }
 #else
-static void sighandler(int signum)
-{
+
+static void sighandler(int signum) {
     fprintf(stderr, "Signal (%d) caught, exiting!\n", signum);
     do_exit = 1;
     mir_sdr_Uninit();
 }
+
 #endif
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 #ifndef _WIN32
     struct sigaction sigact;
 #endif
     char *filename = NULL;
-    int n_read;
+    int bufferSize;
     mir_sdr_ErrT r;
     int opt;
     int gain = DEFAULT_GAIN;
@@ -172,16 +172,13 @@ int main(int argc, char **argv)
     while ((opt = getopt(argc, argv, "f:g:s:n:r:l:b:i:x:")) != -1) {
         switch (opt) {
             case 'f':
-                frequency = (uint32_t)atofs(optarg);
+                frequency = (uint32_t) atofs(optarg);
                 break;
             case 'g':
-                gain = (int)atof(optarg);
+                gain = (int) atof(optarg);
                 break;
             case 's':
-                samp_rate = (uint32_t)atofs(optarg);
-                break;
-            case 'n':
-                bytes_to_read = (uint32_t)atofs(optarg) * 2;
+                samp_rate = (uint32_t) atofs(optarg);
                 break;
             case 'r':
                 gainReductionMode = atoi(optarg);
@@ -190,13 +187,13 @@ int main(int argc, char **argv)
                 rspLNA = atoi(optarg);
                 break;
             case 'b':
-                adjsut_bw(atoi(optarg), &bandwidth);
+                adjust_bw(atoi(optarg), &bandwidth);
                 break;
             case 'i':
-                adjsut_if(atoi(optarg), &ifKhz);
+                adjust_if(atoi(optarg), &ifKhz);
                 break;
             case 'x':
-                adjsut_result_bits(atoi(optarg), &resultBits);
+                adjust_result_bits(atoi(optarg), &resultBits);
                 break;
             default:
                 usage();
@@ -215,7 +212,7 @@ int main(int argc, char **argv)
     fprintf(stdout, "[DEBUG] gainReductionMode: %d\n", gainReductionMode);
     fprintf(stdout, "[DEBUG] samp_rate: %d\n", samp_rate);
     fprintf(stdout, "[DEBUG] gain: %d\n", gain);
-    fprintf(stdout, "[DEBUG] frequency: [Hz] %d / [MHz] %f\n", frequency, frequency/1e6);
+    fprintf(stdout, "[DEBUG] frequency: [Hz] %d / [MHz] %f\n", frequency, frequency / 1e6);
     fprintf(stdout, "[DEBUG] bandwidth: [kHz] %d\n", bandwidth);
     fprintf(stdout, "[DEBUG] IF: %d\n", ifKhz);
     fprintf(stdout, "[DEBUG] Result I/Q bit resolution (bit): %d\n", resultBits);
@@ -244,7 +241,7 @@ int main(int argc, char **argv)
     SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
 #endif
 
-    if(strcmp(filename, "-") == 0) { /* Write samples to stdout */
+    if (strcmp(filename, "-") == 0) { /* Write samples to stdout */
         file = stdout;
 #ifdef _WIN32
         _setmode(_fileno(stdin), _O_BINARY);
@@ -257,23 +254,22 @@ int main(int argc, char **argv)
         }
     }
 
-    if (gainReductionMode == 1)
-    {
-        mir_sdr_SetParam(201,1);
-        mir_sdr_SetParam(202,rspLNA == 1 ? 0 : 1);
+    if (gainReductionMode == 1) {
+        mir_sdr_SetParam(201, 1);
+        mir_sdr_SetParam(202, rspLNA == 1 ? 0 : 1);
     }
 
-    r = mir_sdr_Init((gainReductionMode == 1 ? gain : 78-gain), (samp_rate/1e6), (frequency/1e6),
-                     bandwidth, ifKhz, &samplesPerPacket );
+    r = mir_sdr_Init((gainReductionMode == 1 ? gain : 78 - gain), (samp_rate / 1e6), (frequency / 1e6),
+                     bandwidth, ifKhz, &samplesPerPacket);
 
 
+    bufferSize = (samplesPerPacket * 2);
 
-
-    if(resultBits == 8) {
-        buffer8 = malloc(2*samplesPerPacket * sizeof(uint8_t));
+    if (resultBits == 8) {
+        buffer8 = malloc(bufferSize * sizeof(uint8_t));
     }
     else {
-        buffer16 = malloc(2*samplesPerPacket * sizeof(short));
+        buffer16 = malloc(bufferSize * sizeof(short));
     }
 
 
@@ -282,7 +278,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    mir_sdr_SetDcMode(4,0);
+    mir_sdr_SetDcMode(4, 0);
     mir_sdr_SetDcTrackTime(63);
 
     ibuf = malloc(samplesPerPacket * sizeof(short));
@@ -298,9 +294,8 @@ int main(int argc, char **argv)
         }
 
         j = 0;
-        for (i=0; i < samplesPerPacket; i++)
-        {
-            if(resultBits == 8){
+        for (i = 0; i < samplesPerPacket; i++) {
+            if (resultBits == 8) {
                 buffer8[j++] = (unsigned char) (ibuf[i] >> 8);
                 buffer8[j++] = (unsigned char) (qbuf[i] >> 8);
             }
@@ -310,15 +305,18 @@ int main(int argc, char **argv)
             }
         }
 
-
-        if(resultBits == 8) {
-            fwrite(buffer8, sizeof(uint8_t), samplesPerPacket * 2, file);
+        if (resultBits == 8) {
+            if (fwrite(buffer8, sizeof(uint8_t), bufferSize, file) != (size_t) bufferSize) {
+                fprintf(stderr, "Short write, samples lost, exiting!\n");
+                break;
+            }
         }
-        else{
-            fwrite(buffer16, sizeof(short), samplesPerPacket * 2, file);
+        else {
+            if (fwrite(buffer16, sizeof(short), samplesPerPacket * 2, file) != (size_t) bufferSize) {
+                fprintf(stderr, "Short write, samples lost, exiting!\n");
+                break;
+            }
         }
-
-
     }
 
     if (do_exit)
@@ -331,19 +329,19 @@ int main(int argc, char **argv)
 
     mir_sdr_Uninit();
 
-    if(resultBits == 8){
-        free (buffer8);
+    if (resultBits == 8) {
+        free(buffer8);
     }
-    else{
-        free (buffer16);
+    else {
+        free(buffer16);
     }
 
     out:
     return r >= 0 ? r : -r;
 }
 
-void adjsut_result_bits(int bits, int *ptrResultBits) {
-    switch (bits){
+void adjust_result_bits(int bits, int *ptrResultBits) {
+    switch (bits) {
         case 8:
         case 16:
             *ptrResultBits = bits;
@@ -354,8 +352,8 @@ void adjsut_result_bits(int bits, int *ptrResultBits) {
     usage();
 }
 
-void adjsut_if(int ifFreq, mir_sdr_If_kHzT *ptrIFKhz) {
-    switch (ifFreq){
+void adjust_if(int ifFreq, mir_sdr_If_kHzT *ptrIFKhz) {
+    switch (ifFreq) {
         case 0:
         case 450:
         case 1620:
@@ -369,9 +367,9 @@ void adjsut_if(int ifFreq, mir_sdr_If_kHzT *ptrIFKhz) {
 
 }
 
-void adjsut_bw(int bwHz, mir_sdr_Bw_MHzT *ptrBw) {
+void adjust_bw(int bwHz, mir_sdr_Bw_MHzT *ptrBw) {
 
-    switch (bwHz){
+    switch (bwHz) {
         case 200:
         case 300:
         case 600:
