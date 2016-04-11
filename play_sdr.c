@@ -122,6 +122,7 @@ void usage(void) {
                     "\t[-l RSP LNA enable (default: 0, disabled)]\n"
                     "\t[-y Flipcomplex I-Q => Q-I (default: 0, disabled) 1 = enabled\n"
                     "\t[-x Result I/Q bit resolution (uint8 / short) (default: 8, possible values: 8 16)]\n"
+                    "\t[-v Verbose mode, prints debug information. Default 0, 1 = enabled\n"
                     "\tfilename (a '-' dumps samples to stdout)\n\n");
     exit(1);
 }
@@ -158,6 +159,7 @@ int main(int argc, char **argv) {
     int opt;
     int gain = DEFAULT_GAIN;
     int flipcomplex = 0;
+    int verbose = 0;
     FILE *file;
 
     uint8_t *buffer8;
@@ -170,7 +172,7 @@ int main(int argc, char **argv) {
     mir_sdr_Bw_MHzT bandwidth = mir_sdr_BW_1_536;
     mir_sdr_If_kHzT ifKhz = mir_sdr_IF_Zero;
 
-    while ((opt = getopt(argc, argv, "f:g:s:n:l:b:i:x:y:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:g:s:n:l:b:i:x:y:v:")) != -1) {
         switch (opt) {
             case 'f':
                 frequency = (uint32_t) atofs(optarg);
@@ -196,6 +198,9 @@ int main(int argc, char **argv) {
             case 'y':
                 flipcomplex = atoi(optarg);
                 break;
+            case 'v':
+                verbose = atoi(optarg);
+                break;
             default:
                 usage();
                 break;
@@ -214,15 +219,17 @@ int main(int argc, char **argv) {
         filename = argv[optind];
     }
 
-    fprintf(stdout, "[DEBUG] *************** play_sdr16 init summary *********************\n");
-    fprintf(stdout, "[DEBUG] LNA: %d\n", rspLNA);
-    fprintf(stdout, "[DEBUG] samp_rate: %d\n", samp_rate);
-    fprintf(stdout, "[DEBUG] gain: %d\n", gain);
-    fprintf(stdout, "[DEBUG] frequency: [Hz] %d / [MHz] %f\n", frequency, frequency / 1e6);
-    fprintf(stdout, "[DEBUG] bandwidth: [kHz] %d\n", bandwidth);
-    fprintf(stdout, "[DEBUG] IF: %d\n", ifKhz);
-    fprintf(stdout, "[DEBUG] Result I/Q bit resolution (bit): %d\n", resultBits);
-    fprintf(stdout, "[DEBUG] *************************************************************\n");
+    if (verbose == 1) {
+        fprintf(stderr, "[DEBUG] *************** play_sdr16 init summary *********************\n");
+        fprintf(stderr, "[DEBUG] LNA: %d\n", rspLNA);
+        fprintf(stderr, "[DEBUG] samp_rate: %d\n", samp_rate);
+        fprintf(stderr, "[DEBUG] gain: %d\n", gain);
+        fprintf(stderr, "[DEBUG] frequency: [Hz] %d / [MHz] %f\n", frequency, frequency / 1e6);
+        fprintf(stderr, "[DEBUG] bandwidth: [kHz] %d\n", bandwidth);
+        fprintf(stderr, "[DEBUG] IF: %d\n", ifKhz);
+        fprintf(stderr, "[DEBUG] Result I/Q bit resolution (bit): %d\n", resultBits);
+        fprintf(stderr, "[DEBUG] *************************************************************\n");
+    }
 
 
     r = mir_sdr_Init(40, 2.0, 100.00, mir_sdr_BW_1_536, mir_sdr_IF_Zero,
@@ -345,7 +352,6 @@ int main(int argc, char **argv) {
 
     if (file != stdout)
         fclose(file);
-
 
 
     if (resultBits == 8) {
