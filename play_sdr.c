@@ -120,6 +120,7 @@ void usage(void) {
                     "\t[-g gain (default: 50)]\n"
                     "\t[-r enable gain reduction (default: 0, disabled)]\n"
                     "\t[-l RSP LNA enable (default: 0, disabled)]\n"
+                    "\t[-y Flipcomplex I-Q => Q-I (default: 0, disabled) 1 = enabled\n"
                     "\t[-x Result I/Q bit resolution (uint8 / short) (default: 8, possible values: 8 16)]\n"
                     "\tfilename (a '-' dumps samples to stdout)\n\n");
     exit(1);
@@ -156,6 +157,7 @@ int main(int argc, char **argv) {
     mir_sdr_ErrT r;
     int opt;
     int gain = DEFAULT_GAIN;
+    int flipcomplex = 0;
     FILE *file;
 
     uint8_t *buffer8;
@@ -168,7 +170,7 @@ int main(int argc, char **argv) {
     mir_sdr_Bw_MHzT bandwidth = mir_sdr_BW_1_536;
     mir_sdr_If_kHzT ifKhz = mir_sdr_IF_Zero;
 
-    while ((opt = getopt(argc, argv, "f:g:s:n:l:b:i:x:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:g:s:n:l:b:i:x:y:")) != -1) {
         switch (opt) {
             case 'f':
                 frequency = (uint32_t) atofs(optarg);
@@ -190,6 +192,9 @@ int main(int argc, char **argv) {
                 break;
             case 'x':
                 adjust_result_bits(atoi(optarg), &resultBits);
+                break;
+            case 'y':
+                flipcomplex = atoi(optarg);
                 break;
             default:
                 usage();
@@ -256,8 +261,8 @@ int main(int argc, char **argv) {
     }
 
 
-     mir_sdr_SetParam(201, 1);
-     mir_sdr_SetParam(202, rspLNA == 1 ? 0 : 1);
+    mir_sdr_SetParam(201, 1);
+    mir_sdr_SetParam(202, rspLNA == 1 ? 0 : 1);
 
 
     r = mir_sdr_Init(gain, (samp_rate / 1e6), (frequency / 1e6),
@@ -297,12 +302,22 @@ int main(int argc, char **argv) {
         j = 0;
         for (i = 0; i < samplesPerPacket; i++) {
             if (resultBits == 8) {
-                buffer8[j++] = (unsigned char) (ibuf[i] >> 8);
-                buffer8[j++] = (unsigned char) (qbuf[i] >> 8);
+                if (flipcomplex == 0) {
+                    buffer8[j++] = (unsigned char) (ibuf[i] >> 8);
+                    buffer8[j++] = (unsigned char) (qbuf[i] >> 8);
+                } else {
+                    buffer8[j++] = (unsigned char) (qbuf[i] >> 8);
+                    buffer8[j++] = (unsigned char) (ibuf[i] >> 8);
+                }
             }
             else {
-                buffer16[j++] = ibuf[i];
-                buffer16[j++] = qbuf[i];
+                if (flipcomplex == 0) {
+                    buffer16[j++] = ibuf[i];
+                    buffer16[j++] = qbuf[i];
+                } else {
+                    buffer16[j++] = qbuf[i];
+                    buffer16[j++] = ibuf[i];
+                }
             }
         }
 

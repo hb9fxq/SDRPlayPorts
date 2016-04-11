@@ -29,8 +29,32 @@ sudo make install
 # Todo
 * Test, refactor and enhance ;-)
 
-## what's next
-* Gain settigns
+## Samples
+* Use with OpenWebRx / Config file:
+
+```python
+# ==== DSP/RX settings ====
+dsp_plugin="csdr"
+fft_fps=9
+fft_size=4096*2
+samp_rate = 2048000
+center_freq = 7100000
+rf_gain = 50 #in dB. For an RTL-SDR, rf_gain=0 will set the tuner to auto gain mode, else it will be in manual gain mode.
+ppm = 0
+
+audio_compression="adpcm" #valid values: "adpcm", "none"
+fft_compression="adpcm" #valid values: "adpcm", "none"
+
+start_rtl_thread=True
+
+# ==== I/Q sources (uncomment the appropriate) ====
+
+# >> RTL-SDR via rtl_sdr
+
+start_rtl_command="play_sdr -s {samp_rate} -f {center_freq} -x 16 -g {rf_gain} -y 0 -".format(rf_gain=rf_gain, center_freq=center_freq, samp_rate=samp_rate, ppm=ppm)
+format_conversion="csdr convert_s16_f"
+```
+
 
 # License
 
