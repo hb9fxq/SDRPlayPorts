@@ -55,6 +55,15 @@ start_rtl_command="play_sdr -s {samp_rate} -f {center_freq} -x 16 -g {rf_gain} -
 format_conversion="csdr convert_s16_f"
 ```
 ![SDRPlay with OpenWebRX, 16bit option set](https://raw.githubusercontent.com/krippendorf/SDRPlayPorts/master/doc/img/openwebrxcfg.png)
+* Use with Baudline
+
+
+```bash
+play_sdr -s 2048000  -f 7.1M -g 50 -l 0 -x 16 - | /opt/devApps/baudline/baudline -samplerate 204800 -reset -channels 2 -format le16 -flipcomplex  -quadrature -basefrequency 7100000  -stdin
+```
+![SDRPlay with Baudline, 16bit option set](https://raw.githubusercontent.com/krippendorf/SDRPlayPorts/master/doc/img/baudlinecfg.png)
+
+
 
 # License
 
