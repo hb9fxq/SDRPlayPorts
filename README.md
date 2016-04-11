@@ -54,7 +54,7 @@ start_rtl_thread=True
 start_rtl_command="play_sdr -s {samp_rate} -f {center_freq} -x 16 -g {rf_gain} -y 0 -".format(rf_gain=rf_gain, center_freq=center_freq, samp_rate=samp_rate, ppm=ppm)
 format_conversion="csdr convert_s16_f"
 ```
-
+![SDRPlay with OpenWebRX, 16bit option set](https://raw.githubusercontent.com/krippendorf/SDRPlayPorts/master/doc/img/openwebrxcfg.png)
 
 # License
 
