@@ -37,9 +37,9 @@ sudo make install
 dsp_plugin="csdr"
 fft_fps=9
 fft_size=4096*2
-samp_rate = 2048000
-center_freq = 7100000
-rf_gain = 50 #in dB. For an RTL-SDR, rf_gain=0 will set the tuner to auto gain mode, else it will be in manual gain mode.
+samp_rate = 1024000
+center_freq = 3600000
+rf_gain = 35 #in dB. For an RTL-SDR, rf_gain=0 will set the tuner to auto gain mode, else it will be in manual gain mode.
 ppm = 0
 
 audio_compression="adpcm" #valid values: "adpcm", "none"
@@ -51,8 +51,9 @@ start_rtl_thread=True
 
 # >> RTL-SDR via rtl_sdr
 
-start_rtl_command="play_sdr -s {samp_rate} -f {center_freq} -x 16 -g {rf_gain} -y 0 -".format(rf_gain=rf_gain, center_freq=center_freq, samp_rate=samp_rate, ppm=ppm)
+start_rtl_command="play_sdr -b 600 -s {samp_rate} -f {center_freq} -x 16 -g {rf_gain} -y 0 -".format(rf_gain=rf_gain, center_freq=center_freq, samp_rate=samp_rate, ppm=ppm)
 format_conversion="csdr convert_s16_f"
+
 ```
 ![SDRPlay with OpenWebRX, 16bit option set](https://raw.githubusercontent.com/krippendorf/SDRPlayPorts/master/doc/img/openwebrxcfg.png)
 * Use with Baudline
