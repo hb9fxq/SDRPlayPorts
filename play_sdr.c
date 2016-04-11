@@ -335,6 +335,9 @@ int main(int argc, char **argv) {
         }
     }
 
+
+    mir_sdr_Uninit();
+
     if (do_exit)
         fprintf(stderr, "\nUser cancel, exiting...\n");
     else
@@ -343,7 +346,7 @@ int main(int argc, char **argv) {
     if (file != stdout)
         fclose(file);
 
-    mir_sdr_Uninit();
+
 
     if (resultBits == 8) {
         free(buffer8);
