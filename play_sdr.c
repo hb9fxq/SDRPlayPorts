@@ -298,9 +298,18 @@ int main(int argc, char **argv) {
     qbuf = malloc(samplesPerPacket * sizeof(short));
 
     fprintf(stderr, "Writing samples...\n");
+    int initialBuffers = 100;
+
     while (!do_exit) {
         r = mir_sdr_ReadPacket(ibuf, qbuf, &firstSample, &grChanged, &rfChanged,
                                &fsChanged);
+
+        if(initialBuffers > 100){
+            // skip first buffers to warm up... fixes the fliped I/Q
+            initialBuffers--;
+            continue;
+
+        }
         if (r != mir_sdr_Success) {
             fprintf(stderr, "WARNING: ReadPacket failed.\n");
             break;
