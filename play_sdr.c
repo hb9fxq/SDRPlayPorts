@@ -298,15 +298,15 @@ int main(int argc, char **argv) {
     qbuf = malloc(samplesPerPacket * sizeof(short));
 
     fprintf(stderr, "Writing samples...\n");
-    int initialBuffers = 100;
+    int initialPackets = samplesPerPacket *2 ;
 
     while (!do_exit) {
         r = mir_sdr_ReadPacket(ibuf, qbuf, &firstSample, &grChanged, &rfChanged,
                                &fsChanged);
 
-        if(initialBuffers > 100){
+        if(initialPackets > samp_rate){
             // skip first buffers to warm up... fixes the fliped I/Q
-            initialBuffers--;
+            initialPackets--;
             continue;
 
         }
