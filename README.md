@@ -60,7 +60,7 @@ format_conversion="csdr convert_s16_f"
 
 
 ```bash
-play_sdr -s 2048000  -f 7.1M -g 50 -l 0 -x 16 - | /opt/devApps/baudline/baudline -samplerate 204800 -reset -channels 2 -format le16 -flipcomplex  -quadrature -basefrequency 7100000  -stdin
+timeout 15s play_sdr -s 8000000 -b 600 -f 3.6M -g 35 -l 0 -x 16 8000000_16bit.raw
 ```
 ![SDRPlay with Baudline, 16bit option set](https://raw.githubusercontent.com/krippendorf/SDRPlayPorts/master/doc/img/baudlinecfg.png)
 
