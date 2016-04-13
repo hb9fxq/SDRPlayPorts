@@ -32,14 +32,17 @@ sudo make install
 ## Samples
 * Use with OpenWebRx / Config file:
 
-I've tried the 16 bit (-x 16 switch and csdr convert_s16_f) variant, but no luck so far, maybe you?
+Very unstable with play_sdr so far...
+
+I've tried the 16 bit (-x 16 switch and csdr convert_s16_f) and 8bit variant, but no luck so far, maybe you?
 Check for aliasing, mirrors, before reporting success ;)
+
 
 ```python
 # ==== DSP/RX settings ====
 dsp_plugin="csdr"
 fft_fps=9
-fft_size=4096*2
+fft_size=4096
 samp_rate = 1024000
 center_freq = 3600000
 rf_gain = 35 #in dB. For an RTL-SDR, rf_gain=0 will set the tuner to auto gain mode, else it will be in manual gain mode.
