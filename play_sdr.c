@@ -18,6 +18,23 @@
  *
  * ************************************** THIS IS A FORK ******************* ORIGINAL COPYRIGHT SEE ABOVE.
  *
+ *
+
+
+ __/\\\________/\\\__/\\\\\\\\\\\\\________/\\\\\\\\\_____/\\\\\\\\\\\\\\\__/\\\_______/\\\________/\\\_______
+ _\/\\\_______\/\\\_\/\\\/////////\\\____/\\\///////\\\__\/\\\///////////__\///\\\___/\\\/______/\\\\/\\\\____
+  _\/\\\_______\/\\\_\/\\\_______\/\\\___/\\\______\//\\\_\/\\\_______________\///\\\\\\/______/\\\//\////\\\__
+   _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\___\//\\\_____/\\\\\_\/\\\\\\\\\\\_________\//\\\\_______/\\\______\//\\\_
+    _\/\\\/////////\\\_\/\\\/////////\\\___\///\\\\\\\\/\\\_\/\\\///////___________\/\\\\______\//\\\______/\\\__
+     _\/\\\_______\/\\\_\/\\\_______\/\\\_____\////////\/\\\_\/\\\__________________/\\\\\\______\///\\\\/\\\\/___
+      _\/\\\_______\/\\\_\/\\\_______\/\\\___/\\________/\\\__\/\\\________________/\\\////\\\______\////\\\//_____
+       _\/\\\_______\/\\\_\/\\\\\\\\\\\\\/___\//\\\\\\\\\\\/___\/\\\______________/\\\/___\///\\\_______\///\\\\\\__
+        _\///________\///__\/////////////______\///////////_____\///______________\///_______\///__________\//////___
+
+ *
+ *
+ *
+ *
  *  SDRPlayPorts
  *  Ports of some parts of rtl-sdr for the SDRPlay (original: git://git.osmocom.org/rtl-sdr.git /)
  *  2016: Fork by HB9FXQ (Frank Werner-Krippendorf, mail@hb9fxq.ch)
@@ -50,38 +67,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef _WIN32
-
 #include <unistd.h>
 #include "mirsdrapi-rsp.h"
 
-#else
-#include <windows.h>
-#include <io.h>
-#include <fcntl.h>
-#include "mir_sdr.h"
-#endif
 
-#define DEFAULT_SAMPLE_RATE        2048000
-#define DEFAULT_LNA                0;
-#define DEFAULT_GAIN_REDUCTION  0;
-#define DEFAULT_GAIN            40;
-#define DEFAULT_FREQUENCY       100000000;
-#define DEFAULT_RESULT_BITS     8; // more compatible with RTL_SDR
+#define DEFAULT_SAMPLE_RATE         2048000
+#define DEFAULT_LNA                 0;
+#define DEFAULT_AGC_SETPOINT        -30;
+#define DEFAULT_FREQUENCY           100000000;
+#define DEFAULT_RESULT_BITS         8; // more compatible with RTL_SDR
 
 static int do_exit = 0;
 
-short *ibuf;
-short *qbuf;
-unsigned int firstSample;
-int samplesPerPacket, grChanged, fsChanged, rfChanged;
-int resultBits = DEFAULT_RESULT_BITS;
+int             samplesPerPacket;
+int             resultBits = DEFAULT_RESULT_BITS;
+int             flipComplex = 0;
+uint8_t         *buffer8;
+short           *buffer16;
+FILE            *file;
+
+void*           context = NULL; /* currently unused - let the API the thread stuff */
+
 
 void adjust_bw(int bwHz, mir_sdr_Bw_MHzT *ptr);
-
 void adjust_if(int ifFreq, mir_sdr_If_kHzT *ptr);
-
 void adjust_result_bits(int bits, int *ptrResultBits);
+
 
 double atofs(char *s)
 /* standard suffixes */
@@ -110,6 +121,7 @@ double atofs(char *s)
     return atof(s);
 }
 
+
 void usage(void) {
     fprintf(stderr,
             "play_sdr, an I/Q recorder for SDRplay RSP receivers\n\n"
@@ -117,8 +129,9 @@ void usage(void) {
                     "\t[-s samplerate (default: 2048000 Hz)]\n"
                     "\t[-b Band Width in Hz (default: 1536) possible values: 200 300 600 1536 5000 6000 7000 8000]\n"
                     "\t[-i IF in kHz (default: 0 (=Zero IF)) possible values: 0 450 1620 2048]\n"
-                    "\t[-g gain (default: 50)]\n"
-                    "\t[-r enable gain reduction (default: 0, disabled)]\n"
+                    "\t[-r ADC set point is in dBfs\n"
+                    "(decibels relative to full scale) and will normally lie in the range 0dBfs (full scale) to -50dBfs (50dB below\n"
+                    "full scale). Default: -30)]\n\n"
                     "\t[-l RSP LNA enable (default: 0, disabled)]\n"
                     "\t[-y Flipcomplex I-Q => Q-I (default: 0, disabled) 1 = enabled\n"
                     "\t[-x Result I/Q bit resolution (uint8 / short) (default: 8, possible values: 8 16)]\n"
@@ -127,48 +140,86 @@ void usage(void) {
     exit(1);
 }
 
-#ifdef _WIN32
-BOOL WINAPI
-sighandler(int signum)
+void callbackGC(unsigned int gRdB, unsigned int lnaGRdB, void *cbContext)
 {
-    if (CTRL_C_EVENT == signum) {
-        fprintf(stderr, "Signal caught, exiting!\n");
-        do_exit = 1;
-        mir_sdr_Uninit();
-        return TRUE;
-    }
-    return FALSE;
+   return;
 }
-#else
+
+unsigned int firstBufferCallback = 1;
+
+void streamCallback (short *xi, short *xq, unsigned int firstSampleNum, int grChanged, int rfChanged, int fsChanged, unsigned int numSamples, unsigned int reset, void *cbContext){
+
+
+    if(firstBufferCallback == 1 || reset == 1){
+
+        if (resultBits == 8) {
+            buffer8 = malloc(numSamples * 2 * sizeof(uint8_t));
+        }
+        else {
+            buffer16 = malloc(numSamples * 2 * sizeof(short));
+        }
+
+        firstBufferCallback = 0;
+    }
+
+    int j = 0;
+    int i = 0;
+
+    for (i = 0; i < numSamples; i++) {
+        if (resultBits == 8) {
+            if (flipComplex == 0) {
+                buffer8[j++] = (unsigned char) (xi[i] >> 8);
+                buffer8[j++] = (unsigned char) (xq[i] >> 8);
+            } else {
+                buffer8[j++] = (unsigned char) (xq[i] >> 8);
+                buffer8[j++] = (unsigned char) (xi[i] >> 8);
+            }
+        }
+        else {
+            if (flipComplex == 0) {
+                buffer16[j++] = (xi[i]);
+                buffer16[j++] = (xq[i]);
+            } else {
+                buffer16[j++] = (xq[i]);
+                buffer16[j++] = (xi[i]);
+            }
+        }
+    }
+
+    if (resultBits == 8) {
+        if (fwrite(buffer8, sizeof(uint8_t), numSamples*2, file) != (size_t) numSamples*2) {
+            fprintf(stderr, "Short write, samples lost, exiting 8!\n"); // TODO: take firstSampleNum into account
+            return;
+        }
+    }
+    else {
+        if (fwrite(buffer16, sizeof(short), numSamples * 2, file) != (size_t) numSamples*2) {
+            fprintf(stderr, "Short write, samples lost, exiting 16!\n"); // TODO: take firstSampleNum into account
+            return;
+        }
+    }
+}
 
 static void sighandler(int signum) {
     fprintf(stderr, "Signal (%d) caught, exiting!\n", signum);
     do_exit = 1;
-    mir_sdr_Uninit();
 }
 
-#endif
-
 int main(int argc, char **argv) {
-#ifndef _WIN32
-    struct sigaction sigact;
-#endif
+
+    struct sigaction    sigact;
     char *filename = NULL;
-    int bufferSize;
     mir_sdr_ErrT r;
     int opt;
-    int gain = DEFAULT_GAIN;
-    int flipcomplex = 0;
+    int agcSetPoint = DEFAULT_AGC_SETPOINT;
     int verbose = 0;
-    FILE *file;
-
-    uint8_t *buffer8;
-    short *buffer16;
 
     uint32_t frequency = DEFAULT_FREQUENCY;
     uint32_t samp_rate = DEFAULT_SAMPLE_RATE;
     int rspLNA = DEFAULT_LNA;
+
     int i, j;
+
     mir_sdr_Bw_MHzT bandwidth = mir_sdr_BW_1_536;
     mir_sdr_If_kHzT ifKhz = mir_sdr_IF_Zero;
 
@@ -178,7 +229,7 @@ int main(int argc, char **argv) {
                 frequency = (uint32_t) atofs(optarg);
                 break;
             case 'g':
-                gain = (int) atof(optarg);
+                agcSetPoint = (int) atof(optarg);
                 break;
             case 's':
                 samp_rate = (uint32_t) atofs(optarg);
@@ -196,7 +247,7 @@ int main(int argc, char **argv) {
                 adjust_result_bits(atoi(optarg), &resultBits);
                 break;
             case 'y':
-                flipcomplex = atoi(optarg);
+                flipComplex = atoi(optarg);
                 break;
             case 'v':
                 verbose = atoi(optarg);
@@ -207,12 +258,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* FIXME, validate inputs, as suggested by Andy:
-     * """You also might want to do some checking of sample rate and IF bandiwith and IF mode as only certain combinations are valid states.
-     * Although you will get an error condition from the API if it detects an invalid case."""
-     *
-    */
-
     if (argc <= optind) {
         usage();
     } else {
@@ -220,10 +265,10 @@ int main(int argc, char **argv) {
     }
 
     if (verbose == 1) {
-        fprintf(stderr, "[DEBUG] *************** play_sdr16 init summary *********************\n");
+        fprintf(stderr, "[DEBUG] *************** play_sdr init summary *********************\n");
         fprintf(stderr, "[DEBUG] LNA: %d\n", rspLNA);
         fprintf(stderr, "[DEBUG] samp_rate: %d\n", samp_rate);
-        fprintf(stderr, "[DEBUG] gain: %d\n", gain);
+        fprintf(stderr, "[DEBUG] agcSetPoint: %d\n", agcSetPoint);
         fprintf(stderr, "[DEBUG] frequency: [Hz] %d / [MHz] %f\n", frequency, frequency / 1e6);
         fprintf(stderr, "[DEBUG] bandwidth: [kHz] %d\n", bandwidth);
         fprintf(stderr, "[DEBUG] IF: %d\n", ifKhz);
@@ -232,17 +277,6 @@ int main(int argc, char **argv) {
     }
 
 
-    r = mir_sdr_Init(40, 2.0, 100.00, mir_sdr_BW_1_536, mir_sdr_IF_Zero,
-                     &samplesPerPacket);
-
-    if (r != mir_sdr_Success) {
-        fprintf(stderr, "Failed to open SDRplay RSP device.\n");
-        exit(1);
-    }
-
-    mir_sdr_Uninit();
-
-#ifndef _WIN32
     sigact.sa_handler = sighandler;
     sigemptyset(&sigact.sa_mask);
     sigact.sa_flags = 0;
@@ -250,15 +284,10 @@ int main(int argc, char **argv) {
     sigaction(SIGTERM, &sigact, NULL);
     sigaction(SIGQUIT, &sigact, NULL);
     sigaction(SIGPIPE, &sigact, NULL);
-#else
-    SetConsoleCtrlHandler( (PHANDLER_ROUTINE) sighandler, TRUE );
-#endif
+
 
     if (strcmp(filename, "-") == 0) { /* Write samples to stdout */
         file = stdout;
-#ifdef _WIN32
-        _setmode(_fileno(stdin), _O_BINARY);
-#endif
     } else {
         file = fopen(filename, "wb");
         if (!file) {
@@ -268,22 +297,11 @@ int main(int argc, char **argv) {
     }
 
 
-    mir_sdr_SetParam(201, 1);
-    mir_sdr_SetParam(202, rspLNA == 1 ? 0 : 1);
+    mir_sdr_AgcControl(1, agcSetPoint, 0, 0, 0, 0, rspLNA);
 
-
-    r = mir_sdr_Init(gain, (samp_rate / 1e6), (frequency / 1e6),
-                     bandwidth, ifKhz, &samplesPerPacket);
-
-
-    bufferSize = (samplesPerPacket * 2);
-
-    if (resultBits == 8) {
-        buffer8 = malloc(bufferSize * sizeof(uint8_t));
-    }
-    else {
-        buffer16 = malloc(bufferSize * sizeof(short));
-    }
+    int infoOverallGr;
+    r = mir_sdr_StreamInit(&agcSetPoint, (samp_rate/1e6), (frequency/1e6), mir_sdr_BW_1_536, mir_sdr_IF_Zero, rspLNA, &infoOverallGr, 1 /* use internal gr tables acording to band */, &samplesPerPacket, streamCallback,
+                       callbackGC, &context);
 
 
     if (r != mir_sdr_Success) {
@@ -291,61 +309,15 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+
     mir_sdr_SetDcMode(4, 0);
     mir_sdr_SetDcTrackTime(63);
 
-    ibuf = malloc(samplesPerPacket * sizeof(short));
-    qbuf = malloc(samplesPerPacket * sizeof(short));
 
     fprintf(stderr, "Writing samples...\n");
-
     while (!do_exit) {
-        r = mir_sdr_ReadPacket(ibuf, qbuf, &firstSample, &grChanged, &rfChanged,
-                               &fsChanged);
-
-        if (r != mir_sdr_Success) {
-            fprintf(stderr, "WARNING: ReadPacket failed.\n");
-            break;
-        }
-
-        j = 0;
-        for (i = 0; i < samplesPerPacket; i++) {
-            if (resultBits == 8) {
-                if (flipcomplex == 0) {
-                    buffer8[j++] = (unsigned char) (ibuf[i] >> 8);
-                    buffer8[j++] = (unsigned char) (qbuf[i] >> 8);
-                } else {
-                    buffer8[j++] = (unsigned char) (qbuf[i] >> 8);
-                    buffer8[j++] = (unsigned char) (ibuf[i] >> 8);
-                }
-            }
-            else {
-                if (flipcomplex == 0) {
-                    buffer16[j++] = ibuf[i];
-                    buffer16[j++] = qbuf[i];
-                } else {
-                    buffer16[j++] = qbuf[i];
-                    buffer16[j++] = ibuf[i];
-                }
-            }
-        }
-
-        if (resultBits == 8) {
-            if (fwrite(buffer8, sizeof(uint8_t), bufferSize, file) != (size_t) bufferSize) {
-                fprintf(stderr, "Short write, samples lost, exiting!\n");
-                break;
-            }
-        }
-        else {
-            if (fwrite(buffer16, sizeof(short), samplesPerPacket * 2, file) != (size_t) bufferSize) {
-                fprintf(stderr, "Short write, samples lost, exiting!\n");
-                break;
-            }
-        }
+        sleep(1);
     }
-
-
-    mir_sdr_Uninit();
 
     if (do_exit)
         fprintf(stderr, "\nUser cancel, exiting...\n");
