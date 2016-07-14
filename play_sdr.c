@@ -127,7 +127,7 @@ void usage(void) {
             "play_sdr, an I/Q recorder for SDRplay RSP receivers\n\n"
                     "Usage:\t -f frequency_to_tune_to (Hz)\n"
                     "\t[-s samplerate (default: 2048000 Hz)]\n"
-                    "\t[-b Band Width in Hz (default: 1536) possible values: 200 300 600 1536 5000 6000 7000 8000]\n"
+                    "\t[-b Band width in kHz (default: 1536) possible values: 200 300 600 1536 5000 6000 7000 8000]\n"
                     "\t[-i IF in kHz (default: 0 (=Zero IF)) possible values: 0 450 1620 2048]\n"
                     "\t[-r ADC set point is in dBfs\n"
                     "(decibels relative to full scale) and will normally lie in the range 0dBfs (full scale) to -50dBfs (50dB below\n"
@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
 
     if (r != mir_sdr_Success) {
         fprintf(stderr, "Failed to start SDRplay RSP device.\n");
-        exit(1);
+        exit(r);
     }
 
 
